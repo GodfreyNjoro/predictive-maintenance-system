@@ -1,0 +1,449 @@
+// CRITICAL: This schema file is shared across multiple applications. Only make edits with explicit user consent. Changes here affect all apps using this database.
+
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/predictive_maintenance_system/nextjs_space/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String        @id @default(cuid())
+  email         String?
+  name          String?
+  password      String
+  role          String        @default("operator")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  username      String        @unique
+  applications  Application[]
+  auditEntries  AuditEntry[]
+  feedback      Feedback[]
+  uploadedFiles LogFile[]
+}
+
+model Application {
+  id                String             @id @default(cuid())
+  organizationId    String             @default("default")
+  name              String
+  osType            OsType
+  description       String?
+  hostname          String?
+  environment       String?
+  createdById       String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  analysisReports   AnalysisReport[]
+  createdBy         User               @relation(fields: [createdById], references: [id])
+  baselineMetrics   BaselineMetric[]
+  dataSources       DataSource[]
+  logFiles          LogFile[]
+  patternSignatures PatternSignature[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([createdById])
+}
+
+model LogFile {
+  id               String       @id @default(cuid())
+  fileName         String
+  fileType         String
+  logSource        String
+  fileSize         Int
+  cloudStoragePath String
+  isPublic         Boolean      @default(false)
+  status           String       @default("pending")
+  recordCount      Int?         @default(0)
+  errorMessage     String?
+  uploadedBy       String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  dataSourceId     String?
+  ingestionFeed    String?
+  applicationId    String?
+  application      Application? @relation(fields: [applicationId], references: [id])
+  dataSource       DataSource?  @relation(fields: [dataSourceId], references: [id])
+  user             User         @relation(fields: [uploadedBy], references: [id])
+  parsedLogs       ParsedLog[]
+  predictions      Prediction[]
+
+  @@index([dataSourceId, ingestionFeed, createdAt])
+  @@index([applicationId])
+}
+
+model ParsedLog {
+  id        String   @id @default(cuid())
+  logFileId String
+  timestamp DateTime
+  logLevel  String
+  source    String
+  eventId   Int?
+  message   String
+  rawData   String?
+  features  String?
+  createdAt DateTime @default(now())
+  logFile   LogFile  @relation(fields: [logFileId], references: [id], onDelete: Cascade)
+
+  @@index([logFileId])
+  @@index([timestamp])
+  @@index([logLevel])
+}
+
+model Prediction {
+  id             String       @id @default(cuid())
+  logFileId      String?
+  modelVersionId String
+  predictionType String
+  severity       String
+  confidence     Float
+  anomalyScore   Float
+  affectedSystem String
+  description    String
+  features       String?
+  predictedAt    DateTime     @default(now())
+  auditEntries   AuditEntry[]
+  feedback       Feedback[]
+  logFile        LogFile?     @relation(fields: [logFileId], references: [id])
+  modelVersion   ModelVersion @relation(fields: [modelVersionId], references: [id])
+
+  @@index([predictedAt])
+  @@index([severity])
+}
+
+model Feedback {
+  id           String     @id @default(cuid())
+  predictionId String
+  userId       String
+  feedbackType String
+  notes        String?
+  createdAt    DateTime   @default(now())
+  prediction   Prediction @relation(fields: [predictionId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id])
+
+  @@unique([predictionId, userId])
+  @@index([feedbackType])
+}
+
+model ModelVersion {
+  id               String       @id @default(cuid())
+  version          String       @unique
+  modelType        String       @default("isolation_forest")
+  parameters       String?
+  metrics          String?
+  trainingSamples  Int          @default(0)
+  feedbackIncluded Int          @default(0)
+  isActive         Boolean      @default(false)
+  trainedAt        DateTime     @default(now())
+  predictions      Prediction[]
+
+  @@index([isActive])
+}
+
+model AuditEntry {
+  id           String      @id @default(cuid())
+  userId       String?
+  predictionId String?
+  action       String
+  details      String?
+  ipAddress    String?
+  createdAt    DateTime    @default(now())
+  prediction   Prediction? @relation(fields: [predictionId], references: [id])
+  user         User?       @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([action])
+}
+
+model SystemMetric {
+  id         String   @id @default(cuid())
+  metricType String
+  value      Float
+  unit       String
+  source     String
+  timestamp  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([metricType])
+}
+
+model DataSource {
+  id                  String         @id @default(cuid())
+  organizationId      String         @default("default")
+  name                String
+  kind                DbKind
+  host                String
+  port                Int
+  database            String
+  connectionParams    Json?
+  authMode            DbAuthMode
+  username            String?
+  encryptedSecret     Bytes?
+  trustServerCert     Boolean        @default(true)
+  enabled             Boolean        @default(true)
+  spLoggingMode       SpLoggingMode  @default(NONE)
+  enabledFeeds        String[]       @default([])
+  redactSqlText       Boolean        @default(false)
+  defaultIntervalSec  Int            @default(60)
+  feedIntervalsSec    Json?
+  lastTestedAt        DateTime?
+  lastTestResult      String?
+  consecutiveFailures Int            @default(0)
+  createdBy           String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  applicationId       String?
+  application         Application?   @relation(fields: [applicationId], references: [id])
+  ingestionRuns       IngestionRun[]
+  logFiles            LogFile[]
+  watermarks          Watermark[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, enabled])
+  @@index([kind])
+  @@index([applicationId])
+}
+
+model Watermark {
+  id           String     @id @default(cuid())
+  dataSourceId String
+  feed         String
+  cursor       Json
+  lockedUntil  DateTime?
+  lockedBy     String?
+  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime   @default(now())
+  dataSource   DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+
+  @@unique([dataSourceId, feed])
+  @@index([dataSourceId])
+}
+
+model IngestionRun {
+  id           String     @id @default(cuid())
+  dataSourceId String
+  feed         String
+  startedAt    DateTime   @default(now())
+  finishedAt   DateTime?
+  durationMs   Int?
+  rowsFetched  Int        @default(0)
+  rowsEmitted  Int        @default(0)
+  status       String
+  errorMessage String?
+  cursorBefore Json?
+  cursorAfter  Json?
+  dataSource   DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+
+  @@index([dataSourceId, feed, startedAt])
+  @@index([status])
+}
+
+model OfProduct {
+  id          String        @id @default(cuid())
+  sku         String        @unique
+  name        String
+  description String?
+  price       Float
+  cost        Float         @default(0)
+  stock       Int           @default(0)
+  category    String?
+  imageUrl    String?
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  orderItems  OfOrderItem[]
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model OfCustomer {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  firstName String
+  lastName  String
+  phone     String?
+  company   String?
+  address   String?
+  city      String?
+  state     String?
+  country   String?   @default("US")
+  zipCode   String?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  orders    OfOrder[]
+
+  @@index([email])
+}
+
+model OfOrder {
+  id          String        @id @default(cuid())
+  orderNumber String        @unique
+  customerId  String
+  status      OfOrderStatus @default(PENDING)
+  subtotal    Float         @default(0)
+  tax         Float         @default(0)
+  shipping    Float         @default(0)
+  total       Float         @default(0)
+  notes       String?
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  customer    OfCustomer    @relation(fields: [customerId], references: [id])
+  items       OfOrderItem[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OfOrderItem {
+  id        String    @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  unitPrice Float
+  total     Float
+  createdAt DateTime  @default(now())
+  order     OfOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   OfProduct @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model OfBackgroundJob {
+  id           String      @id @default(cuid())
+  name         String
+  type         OfJobType
+  status       OfJobStatus @default(QUEUED)
+  progress     Int         @default(0)
+  result       String?
+  errorMessage String?
+  metadata     String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model AnalysisReport {
+  id             String      @id @default(cuid())
+  applicationId  String
+  logFingerprint Json
+  analysisResult Json
+  summary        String
+  tags           String[]    @default([])
+  verdict        String?
+  verdictNotes   String?
+  verdictAt      DateTime?
+  verdictBy      String?
+  createdAt      DateTime    @default(now())
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+  @@index([applicationId, verdict])
+}
+
+model BaselineMetric {
+  id            String      @id @default(cuid())
+  applicationId String
+  source        String
+  metricName    String
+  sampleCount   Int         @default(0)
+  rollingMean   Float       @default(0)
+  rollingStddev Float       @default(0)
+  lastValue     Float       @default(0)
+  lastUpdatedAt DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, source, metricName])
+  @@index([applicationId])
+}
+
+model PatternSignature {
+  id              String      @id @default(cuid())
+  applicationId   String
+  title           String
+  description     String
+  category        String
+  affectedSources String[]    @default([])
+  severity        String
+  occurrenceCount Int         @default(1)
+  confidence      Float       @default(0.5)
+  severityTrend   String?
+  avgLeadTimeMins Float?
+  lastSeenAt      DateTime    @default(now())
+  operatorVerdict String?
+  operatorNotes   String?
+  operatorAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, category])
+  @@index([applicationId, lastSeenAt])
+  @@index([applicationId, confidence])
+}
+
+enum OsType {
+  WINDOWS
+  LINUX
+}
+
+enum DbKind {
+  MSSQL
+  POSTGRES
+  MYSQL
+  ORACLE
+}
+
+enum DbAuthMode {
+  SQL_AUTH
+  WINDOWS_AUTH
+  IAM
+  TOKEN
+}
+
+enum SpLoggingMode {
+  INSTRUMENTED
+  XEVENTS
+  NONE
+}
+
+enum OfOrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum OfJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum OfJobType {
+  ORDER_SYNC
+  INVENTORY_CHECK
+  REPORT_GENERATION
+  DATA_EXPORT
+  BULK_UPDATE
+}

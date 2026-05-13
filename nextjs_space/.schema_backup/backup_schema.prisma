@@ -1,0 +1,313 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/predictive_maintenance_system/nextjs_space/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String        @id @default(cuid())
+  username      String        @unique
+  email         String?
+  name          String?
+  password      String
+  role          String        @default("operator")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  uploadedFiles LogFile[]
+  feedback      Feedback[]
+  auditEntries  AuditEntry[]
+  applications  Application[]
+}
+
+// =====================================================================
+// APPLICATION — primary unit of monitoring.
+// Each user adds one or more Applications (Windows or Linux). Every
+// data source / uploaded log / prediction belongs to exactly one App.
+// Backwards-compatible: existing rows have applicationId = null and
+// surface as "Unassigned" in the UI.
+// =====================================================================
+model Application {
+  id             String       @id @default(cuid())
+  organizationId String       @default("default") // multi-tenant scoping
+  name           String
+  osType         OsType // WINDOWS | LINUX
+  description    String?
+  hostname       String?
+  environment    String? // free-form: "production", "staging", "dev", ...
+  createdById    String
+  createdBy      User         @relation(fields: [createdById], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  dataSources    DataSource[]
+  logFiles       LogFile[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([createdById])
+}
+
+enum OsType {
+  WINDOWS
+  LINUX
+}
+
+model LogFile {
+  id               String       @id @default(cuid())
+  fileName         String
+  fileType         String // csv, txt, json
+  logSource        String // windows_event, mssql, performance
+  fileSize         Int
+  cloudStoragePath String
+  isPublic         Boolean      @default(false)
+  status           String       @default("pending") // pending, processing, processed, error
+  recordCount      Int?         @default(0)
+  errorMessage     String?
+  uploadedBy       String
+  user             User         @relation(fields: [uploadedBy], references: [id])
+  // Optional link to a DataSource for DB-sourced ingestion (null for human file uploads).
+  dataSourceId     String?
+  dataSource       DataSource?  @relation(fields: [dataSourceId], references: [id], onDelete: SetNull)
+  ingestionFeed    String? // e.g. "jobHistory", "queryStore" — null for file uploads
+  // Application this log belongs to. Nullable for backwards-compat with legacy uploads.
+  applicationId    String?
+  application      Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  parsedLogs       ParsedLog[]
+  predictions      Prediction[]
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([dataSourceId, ingestionFeed, createdAt])
+  @@index([applicationId])
+}
+
+model ParsedLog {
+  id        String   @id @default(cuid())
+  logFileId String
+  logFile   LogFile  @relation(fields: [logFileId], references: [id], onDelete: Cascade)
+  timestamp DateTime
+  logLevel  String // error, warning, info, critical
+  source    String // system, application, mssql, etc
+  eventId   Int?
+  message   String
+  rawData   String?  @db.Text
+  features  String?  @db.Text // JSON string of extracted features
+  createdAt DateTime @default(now())
+
+  @@index([logFileId])
+  @@index([timestamp])
+  @@index([logLevel])
+}
+
+model Prediction {
+  id             String       @id @default(cuid())
+  logFileId      String?
+  logFile        LogFile?     @relation(fields: [logFileId], references: [id], onDelete: SetNull)
+  modelVersionId String
+  modelVersion   ModelVersion @relation(fields: [modelVersionId], references: [id])
+  predictionType String // failure, degradation, normal
+  severity       String // critical, high, medium, low
+  confidence     Float // 0-1 confidence score
+  anomalyScore   Float // raw anomaly score
+  affectedSystem String // windows_server, mssql, storage, network
+  description    String       @db.Text
+  features       String?      @db.Text // JSON of input features
+  predictedAt    DateTime     @default(now())
+  feedback       Feedback[]
+  auditEntries   AuditEntry[]
+
+  @@index([predictedAt])
+  @@index([severity])
+}
+
+model Feedback {
+  id           String     @id @default(cuid())
+  predictionId String
+  prediction   Prediction @relation(fields: [predictionId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  feedbackType String // true_positive, false_positive, missed_incident
+  notes        String?    @db.Text
+  createdAt    DateTime   @default(now())
+
+  @@unique([predictionId, userId])
+  @@index([feedbackType])
+}
+
+model ModelVersion {
+  id               String       @id @default(cuid())
+  version          String       @unique
+  modelType        String       @default("isolation_forest")
+  parameters       String?      @db.Text // JSON of hyperparameters
+  metrics          String?      @db.Text // JSON of performance metrics
+  trainingSamples  Int          @default(0)
+  feedbackIncluded Int          @default(0)
+  isActive         Boolean      @default(false)
+  trainedAt        DateTime     @default(now())
+  predictions      Prediction[]
+
+  @@index([isActive])
+}
+
+model AuditEntry {
+  id           String      @id @default(cuid())
+  userId       String?
+  user         User?       @relation(fields: [userId], references: [id])
+  predictionId String?
+  prediction   Prediction? @relation(fields: [predictionId], references: [id], onDelete: SetNull)
+  action       String // prediction_made, feedback_submitted, model_retrained, file_uploaded
+  details      String?     @db.Text
+  ipAddress    String?
+  createdAt    DateTime    @default(now())
+
+  @@index([createdAt])
+  @@index([action])
+}
+
+model SystemMetric {
+  id         String   @id @default(cuid())
+  metricType String // cpu, memory, disk, network, db_connections
+  value      Float
+  unit       String
+  source     String
+  timestamp  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([metricType])
+}
+
+// =====================================================================
+// PHASE 1 — Database Ingestion (Predictive Maintenance System)
+//
+// These models add DB-source ingestion alongside the existing file-upload
+// pipeline. The design is DB-agnostic: a single connector contract serves
+// MSSQL, PostgreSQL, MySQL (and others) — only the per-DB adapter changes.
+// =====================================================================
+
+// Registry of remote databases we pull telemetry from.
+// One row per (server, database) pair the operator wants to monitor.
+model DataSource {
+  id               String @id @default(cuid())
+  organizationId   String @default("default") // Multi-tenant scoping; "default" for single-tenant deployments.
+  name             String // Human-readable: "PROD-SQL-01", "Reporting-DB"
+  kind             DbKind // MSSQL | POSTGRES | MYSQL | ORACLE
+  host             String
+  port             Int
+  database         String
+  // Optional DB-specific connection extras as JSON, e.g.:
+  //   MSSQL:    { "instance": "SQL2K22", "applicationIntent": "ReadOnly" }
+  //   POSTGRES: { "schema": "public", "sslMode": "require" }
+  //   MYSQL:    { "ssl": true }
+  connectionParams Json?
+
+  // Authentication
+  authMode        DbAuthMode // SQL_AUTH | WINDOWS_AUTH | IAM | TOKEN
+  username        String?
+  // AES-256-GCM ciphertext of the password / token / Kerberos keytab.
+  // Plaintext NEVER touches the DB. See lib/crypto/dsn.ts.
+  encryptedSecret Bytes?
+  trustServerCert Boolean    @default(true) // typical on-prem reality (self-signed certs)
+
+  // Per-source feature flags
+  enabled       Boolean       @default(true)
+  spLoggingMode SpLoggingMode @default(NONE) // INSTRUMENTED | XEVENTS | NONE  (MSSQL-specific; ignored by other DBs)
+  enabledFeeds  String[]      @default([]) // ["jobHistory","queryStore","spExec","waitStats","ioStats","xevents","osMetrics"]
+  redactSqlText Boolean       @default(false) // Strip SQL string literals before storing (PII safety).
+
+  // Operational
+  defaultIntervalSec  Int       @default(60)
+  feedIntervalsSec    Json? // Per-feed cadence overrides: { "jobHistory": 60, "queryStore": 300 }
+  lastTestedAt        DateTime?
+  lastTestResult      String? // "ok" | "error: ..." | "degraded"
+  consecutiveFailures Int       @default(0)
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Application this data source belongs to. Nullable for backwards-compat
+  // with rows created before the Application model existed.
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  watermarks    Watermark[]
+  ingestionRuns IngestionRun[]
+  logFiles      LogFile[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, enabled])
+  @@index([kind])
+  @@index([applicationId])
+}
+
+// Per-feed cursor + previous snapshot (for cumulative feeds like dm_os_wait_stats).
+// One row per (DataSource, feed). Cursor JSON shape varies by feed:
+//   jobHistory:  { "lastInstanceId": 12345 }
+//   queryStore:  { "lastIntervalId": 678, "lastEndTime": "..." }
+//   spExec:      { "lastLogId": 998 }
+//   xevents:     { "lastFile": "...xel", "lastOffset": 4096, "lastTimestamp": "..." }
+//   waitStats:   { "previousSnapshot": { ... }, "capturedAt": "..." }
+//   ioStats:     { "previousSnapshot": { ... }, "capturedAt": "..." }
+//   osMetrics:   { "lastCollectedAt": "..." }
+model Watermark {
+  id           String     @id @default(cuid())
+  dataSourceId String
+  dataSource   DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  feed         String
+  cursor       Json
+  // Lightweight in-process lock to prevent overlapping pulls for the same (source, feed).
+  lockedUntil  DateTime?
+  lockedBy     String?
+  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime   @default(now())
+
+  @@unique([dataSourceId, feed])
+  @@index([dataSourceId])
+}
+
+// Operational audit: one row per pull attempt. Surfaced on /data-sources page
+// (and later on /audit) to give operators "did the collector run?" visibility.
+model IngestionRun {
+  id           String     @id @default(cuid())
+  dataSourceId String
+  dataSource   DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  feed         String
+  startedAt    DateTime   @default(now())
+  finishedAt   DateTime?
+  durationMs   Int?
+  rowsFetched  Int        @default(0)
+  rowsEmitted  Int        @default(0)
+  status       String // "ok" | "error" | "partial" | "skipped"
+  errorMessage String?    @db.Text
+  // Cursor before/after — useful for replay and debugging.
+  cursorBefore Json?
+  cursorAfter  Json?
+
+  @@index([dataSourceId, feed, startedAt])
+  @@index([status])
+}
+
+enum DbKind {
+  MSSQL
+  POSTGRES
+  MYSQL
+  ORACLE
+}
+
+enum DbAuthMode {
+  SQL_AUTH // username + password
+  WINDOWS_AUTH // Kerberos / NTLM (MSSQL primarily)
+  IAM // AWS IAM-based (RDS / Aurora)
+  TOKEN // OAuth / managed-identity token
+}
+
+enum SpLoggingMode {
+  INSTRUMENTED // Customer SP writes to dbo.SP_ExecutionLog
+  XEVENTS // Capture via Extended Events session (no SP changes)
+  NONE // Skip stored-procedure execution feed
+}
