@@ -1,0 +1,88 @@
+# ===========================================
+# Dependencies
+# ===========================================
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+
+# ===========================================
+# Build Output
+# ===========================================
+.next/
+.build/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# ===========================================
+# Environment Variables
+# ===========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+# Keep .env.example for reference
+!.env.example
+
+# ===========================================
+# Local Uploads (for STORAGE_MODE=local)
+# ===========================================
+uploads/*
+!uploads/.gitkeep
+
+# ===========================================
+# Testing & Coverage
+# ===========================================
+coverage/
+.nyc_output/
+*.lcov
+
+# ===========================================
+# IDE & Editor
+# ===========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+.project
+.settings/
+
+# ===========================================
+# Debug Logs
+# ===========================================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ===========================================
+# OS Files
+# ===========================================
+.DS_Store
+Thumbs.db
+*.pem
+
+# ===========================================
+# Deployment
+# ===========================================
+.vercel
+.netlify
+
+# ===========================================
+# Prisma
+# ===========================================
+# Generated client is rebuilt on install
+# prisma/generated/
+
+# ===========================================
+# Misc
+# ===========================================
+*.log
+*.pid
+*.seed
+*.pid.lock
+.abacus.donotdelete
