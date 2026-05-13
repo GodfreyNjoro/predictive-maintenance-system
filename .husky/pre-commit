@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+cd nextjs_space
+
+# Run TypeScript type checking
+echo "🔍 Running type check..."
+npx tsc --noEmit || {
+  echo "❌ TypeScript type check failed. Please fix errors before committing."
+  exit 1
+}
+
+# Run ESLint on staged files
+echo "🔍 Running linter..."
+npx lint-staged || {
+  echo "❌ Lint check failed. Please fix errors before committing."
+  exit 1
+}
+
+echo "✅ Pre-commit checks passed!"

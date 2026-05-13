@@ -1,0 +1,35 @@
+# <type>(<scope>): <short summary>
+#
+# Types: feat | fix | docs | style | refactor | perf | test | build | ci | chore | revert
+# Scopes: auth | db | prisma | api | ui | ml | connectors | scheduler | intelligence | mappers | config
+#
+# --- COMMIT END ---
+#
+# Type meanings:
+#   feat:     A new feature
+#   fix:      A bug fix
+#   docs:     Documentation only changes
+#   style:    Formatting, missing semicolons, etc (no code change)
+#   refactor: Code change that neither fixes a bug nor adds a feature
+#   perf:     A code change that improves performance
+#   test:     Adding missing or correcting existing tests
+#   build:    Changes to build system or external dependencies
+#   ci:       Changes to CI configuration files and scripts
+#   chore:    Other changes that don't modify src or test files
+#   revert:   Reverts a previous commit
+#
+# Rules:
+#   - Subject line max 72 characters
+#   - Use imperative mood ("add" not "added" or "adds")
+#   - Do not end the subject line with a period
+#   - Separate subject from body with a blank line
+#   - Wrap body at 72 characters
+#   - Use the body to explain what and why (not how)
+#
+# Breaking changes:
+#   Add "!" after type/scope: feat(api)!: change response format
+#   Add footer: BREAKING CHANGE: description of what broke
+#
+# References:
+#   Closes #123
+#   Refs #456

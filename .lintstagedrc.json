@@ -1,0 +1,9 @@
+{
+  "nextjs_space/**/*.{ts,tsx}": [
+    "eslint --fix",
+    "prettier --write"
+  ],
+  "nextjs_space/**/*.{json,md,css}": [
+    "prettier --write"
+  ]
+}
