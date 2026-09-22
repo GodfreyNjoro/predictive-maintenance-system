@@ -23,7 +23,7 @@ import { updateBaselines, statsToSamples } from "@/lib/intelligence/baseline-lea
 import { upsertPatterns, type PatternInput } from "@/lib/intelligence/pattern-library";
 import { buildRAGContext, formatRAGPromptSection } from "@/lib/intelligence/rag-pipeline";
 
-const LLM_URL = "https://apps.abacus.ai/v1/chat/completions";
+const LLM_URL = process.env.LLM_API_URL || "https://api.openai.com/v1/chat/completions";
 const MODEL = "gpt-4.1-mini";
 
 interface LogSample {
@@ -223,7 +223,7 @@ export async function POST(req: NextRequest) {
 
   const prompt = buildPrompt(samples, app.name, sources, stats, ragSection);
 
-  const apiKey = process.env.ABACUSAI_API_KEY;
+  const apiKey = process.env.LLM_API_KEY;
   if (!apiKey) {
     return new Response(JSON.stringify({ error: "LLM API key not configured" }), { status: 500 });
   }

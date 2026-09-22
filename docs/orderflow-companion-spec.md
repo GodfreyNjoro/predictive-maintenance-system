@@ -384,7 +384,7 @@ interface EmitResult {
 ## Environment Variables
 
 ```env
-# Database (shared with PMS — auto-configured by Abacus AI)
+# Database (shared with PMS — configured via DATABASE_URL)
 DATABASE_URL=postgresql://...
 
 # PMS Integration
