@@ -138,7 +138,7 @@ async function main() {
       osType: "LINUX",
       description:
         "Order processing companion app for PMS testing. Generates real HTTP, database, job, and error telemetry. Includes a Chaos Engineering panel for triggering failure scenarios.",
-      hostname: "orderflow.abacusai.app",
+      hostname: "orderflow.example.com",
       environment: "testing",
       createdById: admin.id,
     },

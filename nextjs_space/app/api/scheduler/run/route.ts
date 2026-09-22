@@ -1,7 +1,7 @@
 /**
  * Scheduler trigger endpoint.
  *
- * Called by the Abacus scheduled task every 60s to drive the ingestion
+ * Called by the external scheduler (cron / systemd timer) every 60s to drive the ingestion
  * dispatcher. Also callable manually from /data-sources via the
  * "Run now" button (with `dataSourceId` to scope to a single source).
  *
